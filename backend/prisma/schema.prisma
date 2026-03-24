@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+enum JobStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  DELIVERED
+}
+
+enum ImageType {
+  PRE_SERVICE
+  POST_SERVICE
+}
+
+enum InvoiceType {
+  GST
+  NON_GST
+}
+
+enum RecoveryStatus {
+  RECEIVED
+  ANALYZING
+  RECOVERING
+  SUCCESS
+  FAILURE
+  DELIVERED
+}
+
+enum NotificationChannel {
+  SMS
+  WHATSAPP
+  EMAIL
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  role         Role     @default(STAFF)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignedJobs Job[]    @relation("AssignedJobs")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @unique
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  jobs      Job[]
+  invoices  Invoice[]
+  sales     Sale[]
+}
+
+model Job {
+  id              String      @id @default(cuid())
+  jobNumber       Int         @unique @default(autoincrement())
+  customerId      String
+  deviceType      String
+  imeiSerial      String?
+  problem         String
+  estimatedCost   Decimal     @db.Decimal(10, 2)
+  status          JobStatus   @default(PENDING)
+  technicianId    String?
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  customer        Customer    @relation(fields: [customerId], references: [id])
+  technician      User?       @relation("AssignedJobs", fields: [technicianId], references: [id])
+  images          JobImage[]
+  history         JobHistory[]
+  invoice         Invoice?
+}
+
+model JobImage {
+  id        String    @id @default(cuid())
+  jobId     String
+  type      ImageType
+  url       String
+  publicId  String
+  createdAt DateTime  @default(now())
+
+  job       Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model JobHistory {
+  id          String    @id @default(cuid())
+  jobId       String
+  status      JobStatus
+  note        String?
+  changedById String?
+  createdAt   DateTime  @default(now())
+
+  job         Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model Invoice {
+  id            String      @id @default(cuid())
+  invoiceNumber Int         @unique @default(autoincrement())
+  customerId    String
+  jobId         String?     @unique
+  type          InvoiceType
+  subtotal      Decimal     @db.Decimal(10, 2)
+  gstPercent    Decimal     @db.Decimal(5, 2)
+  gstAmount     Decimal     @db.Decimal(10, 2)
+  total         Decimal     @db.Decimal(10, 2)
+  businessName  String
+  gstin         String?
+  businessLogo  String?
+  businessAddr  String
+  createdAt     DateTime    @default(now())
+
+  customer      Customer    @relation(fields: [customerId], references: [id])
+  job           Job?        @relation(fields: [jobId], references: [id])
+  items         InvoiceItem[]
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  name        String
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  gstPercent  Decimal  @db.Decimal(5, 2)
+  lineTotal   Decimal  @db.Decimal(10, 2)
+
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model Sale {
+  id               String   @id @default(cuid())
+  customerId       String?
+  deviceName       String
+  imeiSerial       String?
+  isOldDevice      Boolean  @default(false)
+  condition        String?
+  purchasePrice    Decimal  @db.Decimal(10, 2)
+  salePrice        Decimal  @db.Decimal(10, 2)
+  profitMargin     Decimal  @db.Decimal(10, 2)
+  createdAt        DateTime @default(now())
+
+  customer         Customer? @relation(fields: [customerId], references: [id])
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  items     InventoryItem[]
+}
+
+model InventoryItem {
+  id            String          @id @default(cuid())
+  name          String
+  sku           String          @unique
+  quantity      Int             @default(0)
+  reorderLevel  Int             @default(5)
+  unitCost      Decimal         @db.Decimal(10, 2)
+  supplierId    String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  supplier      Supplier?       @relation(fields: [supplierId], references: [id])
+  movements     StockMovement[]
+}
+
+model StockMovement {
+  id              String   @id @default(cuid())
+  inventoryItemId String
+  quantity        Int
+  movementType    String
+  note            String?
+  createdAt       DateTime @default(now())
+
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+}
+
+model DataRecoveryCase {
+  id              String         @id @default(cuid())
+  caseNumber      Int            @unique @default(autoincrement())
+  customerId      String
+  storageType     String
+  dataSizeGb      Decimal        @db.Decimal(10, 2)
+  status          RecoveryStatus @default(RECEIVED)
+  price           Decimal        @db.Decimal(10, 2)
+  success         Boolean?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  customer        Customer       @relation(fields: [customerId], references: [id])
+}
+
+model NotificationLog {
+  id          String              @id @default(cuid())
+  channel     NotificationChannel
+  recipient   String
+  message     String
+  status      String
+  referenceId String?
+  createdAt   DateTime            @default(now())
+}
